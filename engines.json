@@ -1,3 +1,6 @@
 {
-  "katana": {"version": "1.1.2", "go": "github.com/projectdiscovery/katana/cmd/katana"}
+  "katana": {
+    "version": "1.8.0",
+    "go": "github.com/projectdiscovery/katana/cmd/katana"
+  }
 }
