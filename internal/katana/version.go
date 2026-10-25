@@ -107,5 +107,5 @@ func VersionHint(ctx context.Context, bin string) string {
 		return ""
 	}
 	v := fmt.Sprintf("%d.%d.%d", installed[0], installed[1], installed[2])
-	return "katana " + v + " is not the tested " + e.Version + "; results may be incomplete. Install the tested version: " + e.Install("katana", e.Version)
+	return "katana " + v + " is not the tested " + e.Version + "; results may be incomplete. Install the tested version: " + e.Install("katana", e.Version) + ", or run raijin-mcp update"
 }
