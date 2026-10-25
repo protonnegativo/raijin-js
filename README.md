@@ -287,6 +287,10 @@ The Raijin banner is **off by default**, so normal runs stay small. `--banner` p
 | `--katana` | katana | path to the binary |
 | `--banner` | false | print the banner to stderr |
 
+## Engine versions
+
+The tested katana version is in `engines.json` (embedded in the binary): the one `bench/fixtures` was produced with. raijin-js warns in `errors`, without failing the run, when the installed katana is older than that or has another major version (`engine_version`), and when katana's results do not have the fields raijin-js reads (`engine_format`: its output format may have changed). A weekly GitHub Actions job runs the live benchmark with the latest katana, and opens a PR to bump `engines.json` when it passes, or an issue when it breaks.
+
 ## Development
 
 ```bash

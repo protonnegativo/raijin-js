@@ -14,9 +14,12 @@ func TestParse(t *testing.T) {
 {"request":{}}
 not json
 `
-	events, err := Parse(strings.NewReader(in))
+	events, st, err := Parse(strings.NewReader(in))
 	if err != nil || len(events) != 3 {
 		t.Fatalf("got %d events, err %v", len(events), err)
+	}
+	if st.Lines != 6 || st.Unparsed != 3 {
+		t.Errorf("stats = %+v, want 6 lines, 3 unparsed", st)
 	}
 	if e := events[0]; e.Status() != 200 || e.ContentType() != "application/javascript" || e.Body() != `fetch("/api/x")` {
 		t.Errorf("first event = %+v", e)

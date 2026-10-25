@@ -208,3 +208,31 @@ func TestScopeWithOnlyWildcardPointsToSubs(t *testing.T) {
 		t.Errorf("got %s", out.String())
 	}
 }
+
+func TestRenamedFieldIsAnEngineFormatError(t *testing.T) {
+	in := filepath.Join(t.TempDir(), "katana.jsonl")
+	lines := `{"request":{"endpoint":"https://app.example.com/static/app.js"},"response":{"status":200,"body":"fetch(\"/api/x\")"}}
+{"request":{"endpoint":"https://app.example.com/static/b.js"},"response":{"status_code":200,"body":"x"}}
+not json
+`
+	if err := os.WriteFile(in, []byte(lines), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := run([]string{"--scope", scopeFile(t), "--input", in}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	var v struct {
+		Omitted map[string]int
+		Errors  []struct{ Kind, Hint string }
+	}
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Errors) != 1 || v.Errors[0].Kind != "engine_format" || !strings.HasPrefix(v.Errors[0].Hint, "2 of 3 katana results") || !strings.Contains(v.Errors[0].Hint, in) {
+		t.Errorf("errors = %+v", v.Errors)
+	}
+	if v.Omitted["unparsed"] != 1 {
+		t.Errorf("the line that is not JSON must be counted: %v", v.Omitted)
+	}
+}

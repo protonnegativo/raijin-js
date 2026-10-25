@@ -21,7 +21,7 @@ func load(t *testing.T) []katana.Event {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	events, err := katana.Parse(f)
+	events, _, err := katana.Parse(f)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -99,25 +99,26 @@ type Options struct {
 	Maps bool
 }
 
-// Run crawls the targets and returns every event, plus the last stderr lines if katana failed.
-func Run(ctx context.Context, targets []string, opt Options) ([]Event, string, error) {
+// Run crawls the targets and returns every event and the parse counts, plus the last stderr lines if
+// katana failed.
+func Run(ctx context.Context, targets []string, opt Options) ([]Event, Stats, string, error) {
 	bin := opt.Binary
 	if bin == "" {
 		bin = "katana"
 	}
 	path, err := exec.LookPath(bin)
 	if err != nil {
-		return nil, "", ErrNotFound
+		return nil, Stats{}, "", ErrNotFound
 	}
 
 	list, err := os.CreateTemp("", "raijin-js-targets-*.txt")
 	if err != nil {
-		return nil, "", err
+		return nil, Stats{}, "", err
 	}
 	defer os.Remove(list.Name())
 	if _, err := io.WriteString(list, strings.Join(targets, "\n")+"\n"); err != nil {
 		list.Close()
-		return nil, "", err
+		return nil, Stats{}, "", err
 	}
 	list.Close()
 
@@ -128,7 +129,7 @@ func Run(ctx context.Context, targets []string, opt Options) ([]Event, string, e
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, "", err
+		return nil, Stats{}, "", err
 	}
 	var r io.Reader = stdout
 	if opt.RawPath != "" {
@@ -138,23 +139,23 @@ func Run(ctx context.Context, targets []string, opt Options) ([]Event, string, e
 		}
 		raw, err := os.OpenFile(opt.RawPath, flags, 0o600)
 		if err != nil {
-			return nil, "", err
+			return nil, Stats{}, "", err
 		}
 		defer raw.Close()
 		r = io.TeeReader(stdout, raw)
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, "", err
+		return nil, Stats{}, "", err
 	}
-	events, parseErr := Parse(r)
+	events, st, parseErr := Parse(r)
 	waitErr := cmd.Wait()
 	if parseErr != nil {
-		return events, tail(stderr.String(), 3), parseErr
+		return events, st, tail(stderr.String(), 3), parseErr
 	}
 	if waitErr != nil {
-		return events, tail(stderr.String(), 3), fmt.Errorf("katana exited: %w", waitErr)
+		return events, st, tail(stderr.String(), 3), fmt.Errorf("katana exited: %w", waitErr)
 	}
-	return events, "", nil
+	return events, st, "", nil
 }
 
 // Args builds the katana command line. The crawl parses JavaScript (-jc, and -jsl: jsluice finds the
@@ -208,26 +209,58 @@ func HostScope(hosts []string) string {
 	return `^https?://(` + strings.Join(alts, "|") + `)(:[0-9]+)?([/?#]|$)`
 }
 
-// Parse reads katana JSONL. Lines that are not JSON objects with an endpoint are skipped.
-func Parse(r io.Reader) ([]Event, error) {
+// Stats counts the non-empty output lines and the ones Parse could not use.
+type Stats struct {
+	Lines int
+	// Unparsed lines are not JSON objects, or have no request.endpoint: they are not in the events.
+	Unparsed int
+}
+
+// Add sums two counts (the crawl and the source map pass).
+func (s Stats) Add(o Stats) Stats {
+	return Stats{Lines: s.Lines + o.Lines, Unparsed: s.Unparsed + o.Unparsed}
+}
+
+// Parse reads katana JSONL. Lines that are not JSON objects with an endpoint are skipped, and counted.
+func Parse(r io.Reader) ([]Event, Stats, error) {
 	var events []Event
+	var st Stats
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 64*1024*1024)
 	for sc.Scan() {
 		line := bytes.TrimSpace(sc.Bytes())
-		if len(line) == 0 || line[0] != '{' {
+		if len(line) == 0 {
 			continue
 		}
+		st.Lines++
 		var ev Event
-		if err := json.Unmarshal(line, &ev); err != nil {
-			continue
-		}
-		if ev.Request.Endpoint == "" {
+		if line[0] != '{' || json.Unmarshal(line, &ev) != nil || ev.Request.Endpoint == "" {
+			st.Unparsed++
 			continue
 		}
 		events = append(events, ev)
 	}
-	return events, sc.Err()
+	return events, st, sc.Err()
+}
+
+// FormatFields names the fields Format checks, for the hint.
+const FormatFields = "request.endpoint and response.status_code (or an error, or katana's empty response for a repeated body)"
+
+// Format counts the results that do not have the fields the reducer needs: a JSON object with
+// request.endpoint, and a status code, an error, or an empty response (katana writes one, with no status
+// and no body, when it has seen the body already). A response with a body and no status means katana
+// renamed or moved the field. It returns the bad results and all results.
+func Format(events []Event, st Stats) (bad, total int) {
+	bad, total = st.Unparsed, st.Unparsed+len(events)
+	for _, e := range events {
+		if e.Error != "" || e.Status() != 0 {
+			continue
+		}
+		if e.Response == nil || e.Response.Body != "" {
+			bad++
+		}
+	}
+	return bad, total
 }
 
 func tail(s string, n int) string {

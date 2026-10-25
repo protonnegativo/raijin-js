@@ -92,13 +92,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	var events []katana.Event
+	var parsed katana.Stats
 	if *input != "" {
 		f, err := os.Open(*input)
 		if err != nil {
 			fmt.Fprintln(stderr, "raijin-js:", err)
 			return 1
 		}
-		events, err = katana.Parse(f)
+		events, parsed, err = katana.Parse(f)
 		f.Close()
 		if err != nil {
 			fmt.Fprintln(stderr, "raijin-js:", err)
@@ -162,7 +163,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 			Binary: *bin, Depth: *depth, Duration: *duration, Rate: *rate, Timeout: *timeout,
 			Concurrency: *concurrency, Hosts: inScope, Extra: fs.Args(), RawPath: *rawPath,
 		}
-		events, stderrTail, err = katana.Run(ctx, inScope, kopt)
+		// A katana other than the tested one may write what raijin-js does not expect: say so, and go on.
+		if hint := katana.VersionHint(ctx, *bin); hint != "" {
+			res.Errors = append(res.Errors, schema.Error{Kind: "engine_version", Hint: hint})
+		}
+		events, parsed, stderrTail, err = katana.Run(ctx, inScope, kopt)
 		switch {
 		case errors.Is(err, katana.ErrNotFound):
 			res.Errors = append(res.Errors, schema.Error{Kind: "missing_engine", Hint: "install katana (go install github.com/projectdiscovery/katana/cmd/katana@latest) or pass --katana <path>"})
@@ -180,12 +185,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 		// told apart from a dangling comment. The extra katana args (headers, proxy) apply to it too.
 		if mapURLs := reduce.MapURLs(events, sc.Allowed); *maps && len(mapURLs) > 0 && ctx.Err() == nil {
 			kopt.Maps = true
-			more, tail, err := katana.Run(ctx, mapURLs, kopt)
+			more, st, tail, err := katana.Run(ctx, mapURLs, kopt)
 			if err != nil {
 				res.Errors = append(res.Errors, engineError(err, tail))
 			}
 			events = append(events, more...)
+			parsed = parsed.Add(st)
 		}
+	}
+	// Results without the fields the reducer reads mean katana's output format changed.
+	if bad, total := katana.Format(events, parsed); bad > 0 {
+		hint := fmt.Sprintf("%d of %d katana results had no %s; the engine's output format may have changed", bad, total, katana.FormatFields)
+		if src := res.Raw + *input; src != "" {
+			hint += ". Read " + src + " for the full output"
+		}
+		res.Errors = append(res.Errors, schema.Error{Kind: "engine_format", Hint: hint})
+	}
+	if parsed.Unparsed > 0 {
+		res.Omitted["unparsed"] += parsed.Unparsed
 	}
 
 	opt := reduce.Defaults()
