@@ -160,3 +160,51 @@ func TestBudgetIsCountedAndPointsToRaw(t *testing.T) {
 		t.Errorf("stdout = %s", out.String())
 	}
 }
+
+// With only --scope, every host the scope names is crawled and wildcards get a next step.
+func TestScopeAloneCrawlsWhatTheScopeNames(t *testing.T) {
+	dir := t.TempDir()
+	scopePath := filepath.Join(dir, "scope.txt")
+	if err := os.WriteFile(scopePath, []byte("example.com\n*.example.com\n10.0.0.0/30\n!10.0.0.1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := filepath.Join(dir, "targets.txt")
+	fake := filepath.Join(dir, "katana")
+	script := "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -list ] && [ ! -e " + got + " ] && cp \"$2\" " + got + "; shift; done\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := run([]string{"--scope", scopePath, "--katana", fake, "--raw", filepath.Join(dir, "raw.jsonl")}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d: %s %s", code, errb.String(), out.String())
+	}
+	b, err := os.ReadFile(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(strings.Fields(string(b)), ",") != "https://example.com,https://10.0.0.0,https://10.0.0.2,https://10.0.0.3" {
+		t.Errorf("katana got targets %q", b)
+	}
+	var res struct{ Next []string }
+	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Next) != 1 || !strings.Contains(res.Next[0], "raijin-subs --scope "+scopePath+" -d example.com") {
+		t.Errorf("next = %v", res.Next)
+	}
+}
+
+// A scope with only a wildcard has nothing to crawl yet: exit 1 with the next step.
+func TestScopeWithOnlyWildcardPointsToSubs(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"--scope", scopeFile(t), "--katana", "/nonexistent/katana"}, &out, &errb); code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+	var res struct {
+		Summary string
+		Next    []string
+	}
+	if err := json.Unmarshal(out.Bytes(), &res); err != nil || res.Summary != "the scope names no single host to scan" || len(res.Next) != 1 {
+		t.Errorf("got %s", out.String())
+	}
+}

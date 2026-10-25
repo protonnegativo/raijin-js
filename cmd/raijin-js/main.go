@@ -37,7 +37,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("raijin-js", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var targets multi
-	fs.Var(&targets, "u", "start URL (repeatable)")
+	fs.Var(&targets, "u", "start URL (repeatable; default: every host the scope names, as https://<host>)")
 	list := fs.String("l", "", "file with one start URL per line")
 	scopeFile := fs.String("scope", "", "scope file (required): domains, *.wildcards, IPs, CIDRs, !exclusions")
 	depth := fs.Int("depth", 3, "maximum crawl depth (katana -d)")
@@ -57,7 +57,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print the version")
 	showBanner := fs.Bool("banner", false, "print the Raijin banner to stderr (off by default to keep output small)")
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "usage: raijin-js --scope scope.txt (-u url | -l urls.txt | --input katana.jsonl) [flags] [-- extra katana args]\n\n")
+		fmt.Fprintf(stderr, "usage: raijin-js --scope scope.txt [-u url | -l urls.txt | --input katana.jsonl] [flags] [-- extra katana args]\n\nWith no targets it crawls every host the scope names (https://<host>).\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -114,8 +114,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 			}
 			targets = append(targets, lines...)
 		}
-		inScope := filter(targets, sc, res.Omitted)
+		var inScope []string
+		if len(targets) == 0 {
+			// no targets given: crawl what the scope names. katana needs URLs and does not crawl a
+			// bare host, so each host starts at https://<host>.
+			hosts, wildcards, ranges := sc.Targets()
+			for _, h := range hosts {
+				inScope = append(inScope, "https://"+h)
+			}
+			for _, w := range wildcards {
+				res.Next = append(res.Next, "raijin-subs --scope "+*scopeFile+" -d "+strings.TrimPrefix(w, "*.")+", then raijin-js -l <live URLs> to cover "+w)
+			}
+			for _, r := range ranges {
+				res.Next = append(res.Next, "raijin-ports --scope "+*scopeFile+" -host "+r+", then raijin-js -l <web URLs> to cover "+r)
+			}
+		} else {
+			inScope = filter(targets, sc, res.Omitted)
+		}
 		if len(inScope) == 0 {
+			if len(res.Next) > 0 {
+				res.Summary = "the scope names no single host to scan"
+				res.Target = *scopeFile
+				write(stdout, &res, *format, *pretty)
+				return 1
+			}
 			fmt.Fprintln(stderr, "raijin-js: no targets in scope")
 			return 1
 		}
