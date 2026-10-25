@@ -1,0 +1,14 @@
+[
+  {"id": "aws-access-key", "severity": "high", "pattern": "\\b((?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA|ANVA|AIPA)[0-9A-Z]{16})\\b", "secret": 1},
+  {"id": "aws-secret-key", "severity": "high", "pattern": "(?i)aws.{0,20}?(?:secret|sk).{0,20}?[\"'`]([A-Za-z0-9/+=]{40})[\"'`]", "secret": 1},
+  {"id": "google-api-key", "severity": "high", "pattern": "\\b(AIza[0-9A-Za-z_\\-]{35})", "secret": 1},
+  {"id": "github-token", "severity": "high", "pattern": "\\b((?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82})\\b", "secret": 1},
+  {"id": "slack-token", "severity": "high", "pattern": "\\b(xox[baprs]-[A-Za-z0-9-]{10,})", "secret": 1},
+  {"id": "slack-webhook", "severity": "high", "pattern": "https://hooks\\.slack\\.com/services/(T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+)", "secret": 1},
+  {"id": "stripe-secret-key", "severity": "high", "pattern": "\\b((?:sk|rk)_live_[0-9A-Za-z]{20,})", "secret": 1},
+  {"id": "sendgrid-key", "severity": "high", "pattern": "\\b(SG\\.[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{43})", "secret": 1},
+  {"id": "private-key", "severity": "high", "pattern": "-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----", "secret": 0, "redact": false},
+  {"id": "url-credentials", "severity": "high", "pattern": "\\b[A-Za-z][A-Za-z0-9+.-]*://[^/\\s:@\"'`]+:([^/\\s@\"'`]+)@[A-Za-z0-9.-]+", "secret": 1},
+  {"id": "jwt", "severity": "medium", "pattern": "\\b(eyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,})", "secret": 1},
+  {"id": "generic-secret", "severity": "medium", "confidence": "heuristic", "pattern": "(?i)\\b(?:api[_-]?key|apikey|secret|client[_-]?secret|secret[_-]?key|access[_-]?token|auth[_-]?token|token|password|passwd|pwd)[\"']?\\s*[:=]\\s*[\"'`]([^\"'`\\s]{8,})[\"'`]", "secret": 1, "require": "[0-9]"}
+]
