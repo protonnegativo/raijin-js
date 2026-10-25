@@ -43,6 +43,10 @@ Against katana's text output, raijin-js is **2.0× larger** on the noisy crawl a
 go install github.com/protonnegativo/raijin-js/cmd/raijin-js@latest
 ```
 
+installs the latest release.
+
+**Versions.** Releases are tagged automatically on every change and every passing engine update. `raijin-js --version` shows the release and the tested engine versions (`raijin-js v0.1.3 (tested with katana 1.8.0)`). `raijin-mcp update` updates every Raijin tool at once.
+
 You also need ProjectDiscovery `katana` on `PATH`, or pass `--katana <path>`.
 
 ## Usage
@@ -289,7 +293,7 @@ The Raijin banner is **off by default**, so normal runs stay small. `--banner` p
 
 ## Engine versions
 
-The tested katana version is in `engines.json` (embedded in the binary): the one `bench/fixtures` was produced with. raijin-js warns in `errors`, without failing the run, when the installed katana is older than that or has another major version (`engine_version`), and when katana's results do not have the fields raijin-js reads (`engine_format`: its output format may have changed). A weekly GitHub Actions job runs the live benchmark with the latest katana, and opens a PR to bump `engines.json` when it passes, or an issue when it breaks.
+The tested katana version is in `engines.json` (embedded in the binary): the one `bench/fixtures` was produced with. raijin-js warns in `errors`, without failing the run, when the installed katana is older than that or has another major version (`engine_version`), and when katana's results do not have the fields raijin-js reads (`engine_format`: its output format may have changed). A weekly GitHub Actions job runs the live benchmark with the latest katana, and when it passes with a newer katana it commits the bump and tags a release, or an issue when it breaks.
 
 ## Development
 

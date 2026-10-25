@@ -1,7 +1,8 @@
 name: Engine drift
 
 # Every week, run the live benchmark with the latest katana. If it passes with a version newer than
-# engines.json, open (or update) a PR that bumps engines.json; if it fails, open (or comment on) an issue.
+# engines.json, commit the bump to the default branch and tag a release; if it fails, open (or comment
+# on) an issue. A passing run closes the open drift issue.
 
 on:
   schedule:
@@ -15,7 +16,6 @@ on:
 permissions:
   contents: write
   issues: write
-  pull-requests: write
 
 jobs:
   drift:
@@ -70,13 +70,41 @@ jobs:
             ${{ runner.temp }}/bench.log
             bench/fixtures
           retention-days: 14
+      - name: Commit the bump and release
+        id: bump
+        if: steps.bench.outcome == 'success'
+        env:
+          INSTALLED: ${{ steps.versions.outputs.installed }}
+          TESTED: ${{ steps.versions.outputs.tested }}
+        run: |
+          newer=$(printf '%s\n%s\n' "$TESTED" "$INSTALLED" | sort -V | tail -1)
+          if [ -z "$INSTALLED" ] || [ "$INSTALLED" = "$TESTED" ] || [ "$newer" != "$INSTALLED" ]; then
+            echo "katana $INSTALLED is not newer than the tested $TESTED; nothing to bump"
+            exit 0
+          fi
+          # the live run refreshed bench/fixtures; BENCHMARK.md numbers come from the committed ones
+          git checkout -- bench/fixtures
+          jq --arg v "$INSTALLED" '.katana.version = $v' engines.json > engines.json.new
+          mv engines.json.new engines.json
+          if ! go test ./... > "$RUNNER_TEMP/test.log" 2>&1; then
+            cat "$RUNNER_TEMP/test.log"
+            { echo "go test ./... failed with engines.json at katana $INSTALLED"; tail -n 30 "$RUNNER_TEMP/test.log"; } > "$RUNNER_TEMP/verify.txt"
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Test with katana $INSTALLED"
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          # a push made with GITHUB_TOKEN does not trigger release.yml: tag here
+          .github/release.sh patch
       - name: Open or update the drift issue
-        if: steps.bench.outcome == 'failure'
+        if: steps.bench.outcome == 'failure' || steps.bump.outputs.failed == 'true'
         env:
           INSTALLED: ${{ steps.versions.outputs.installed }}
         run: |
           {
-            echo "The live benchmark failed with katana $INSTALLED (tested: $(jq -r .katana.version engines.json))."
+            echo "The live benchmark or the tests failed with katana $INSTALLED (tested: $(git show HEAD:engines.json | jq -r .katana.version))."
             echo
             echo '```'
             cat "$RUNNER_TEMP/verify.txt" 2>/dev/null || true
@@ -93,40 +121,11 @@ jobs:
             gh issue create --title "Engine drift: katana $INSTALLED" --label engine-drift --body-file "$RUNNER_TEMP/issue.md"
           fi
           exit 1
-      - name: Open or update the bump PR
-        if: steps.bench.outcome == 'success'
+      - name: Close the drift issue
+        if: steps.bench.outcome == 'success' && steps.bump.outputs.failed != 'true'
         env:
           INSTALLED: ${{ steps.versions.outputs.installed }}
-          TESTED: ${{ steps.versions.outputs.tested }}
         run: |
-          newer=$(printf '%s\n%s\n' "$TESTED" "$INSTALLED" | sort -V | tail -1)
-          if [ -z "$INSTALLED" ] || [ "$INSTALLED" = "$TESTED" ] || [ "$newer" != "$INSTALLED" ]; then
-            echo "katana $INSTALLED is not newer than the tested $TESTED; nothing to bump"
-            exit 0
-          fi
-          # the live run refreshed bench/fixtures; BENCHMARK.md numbers come from the committed ones
-          git checkout -- bench/fixtures
-          jq --arg v "$INSTALLED" '.katana.version = $v' engines.json > engines.json.new
-          mv engines.json.new engines.json
-          branch=engine-bump/katana-$INSTALLED
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$branch"
-          git commit -am "Test with katana $INSTALLED"
-          git push -f origin "$branch"
-          {
-            echo "The live benchmark passed with a newer katana."
-            echo
-            echo "- katana: $TESTED → $INSTALLED"
-            echo
-            echo '```'
-            cat "$RUNNER_TEMP/verify.txt"
-            echo '```'
-            echo
-            echo "The refreshed fixtures are in the run's live-bench artifact, not in this PR. Run: $RUN_URL"
-          } > "$RUNNER_TEMP/pr.md"
-          if [ -n "$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" ]; then
-            gh pr edit "$branch" --body-file "$RUNNER_TEMP/pr.md"
-          else
-            gh pr create --head "$branch" --title "Test with katana $INSTALLED" --body-file "$RUNNER_TEMP/pr.md"
-          fi
+          for n in $(gh issue list --label engine-drift --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Passes with katana $INSTALLED: $RUN_URL"
+          done

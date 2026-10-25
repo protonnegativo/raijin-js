@@ -1,0 +1,37 @@
+name: Release
+
+# Tags every change to the default branch that reaches the binary (patch by default) and creates its
+# GitHub Release, so go install ...@latest resolves to a real version. The logic is in .github/release.sh.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "which part of the version to bump"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMP: ${{ inputs.bump || 'patch' }}
+          # empty on workflow_dispatch (always release); all zeros on a new branch (no base to compare)
+          BEFORE: ${{ github.event.before }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          case $BEFORE in 0000000000000000000000000000000000000000) BEFORE= ;; esac
+          .github/release.sh "$BUMP" "$BEFORE"
