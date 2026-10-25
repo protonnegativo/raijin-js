@@ -1,0 +1,132 @@
+name: Engine drift
+
+# Every week, run the live benchmark with the latest katana. If it passes with a version newer than
+# engines.json, open (or update) a PR that bumps engines.json; if it fails, open (or comment on) an issue.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      katana:
+        description: "katana version to test (latest, or e.g. 1.2.0)"
+        default: latest
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      WANT: ${{ inputs.katana || 'latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # katana's go.mod may need a newer Go than raijin-js's; raijin-js builds with any newer one
+          go-version: stable
+      - name: Install katana
+        run: |
+          mod=$(jq -r .katana.go engines.json)
+          ver=$WANT
+          case $ver in latest|v*) ;; *) ver=v$ver ;; esac
+          go install "$mod@$ver"
+      - name: Installed versions
+        id: versions
+        run: |
+          installed=$(katana -version -duc 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          tested=$(jq -r .katana.version engines.json)
+          echo "katana: installed $installed, tested $tested"
+          echo "installed=$installed" >> "$GITHUB_OUTPUT"
+          echo "tested=$tested" >> "$GITHUB_OUTPUT"
+      - run: pip install tiktoken
+      - name: Live benchmark
+        id: bench
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          W=$RUNNER_TEMP/bench
+          LIVE=1 PY=python3 bench/run.sh "$W" 2>&1 | tee "$RUNNER_TEMP/bench.log"
+          grep ' missing from output\|MISSING' "$RUNNER_TEMP/bench.log" > "$RUNNER_TEMP/verify.txt" || true
+          test "$(grep -c ' missing from output' "$RUNNER_TEMP/verify.txt")" = 2
+          if grep ' missing from output' "$RUNNER_TEMP/verify.txt" | grep -v ': 0 missing from output'; then exit 1; fi
+          if grep -h engine_format "$W"/*.live.json; then
+            echo "raijin-js reported engine_format" >> "$RUNNER_TEMP/verify.txt"
+            grep -ho '{"kind":"engine_format"[^}]*}' "$W"/*.live.json >> "$RUNNER_TEMP/verify.txt" || true
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-bench
+          path: |
+            ${{ runner.temp }}/bench
+            ${{ runner.temp }}/bench.log
+            bench/fixtures
+          retention-days: 14
+      - name: Open or update the drift issue
+        if: steps.bench.outcome == 'failure'
+        env:
+          INSTALLED: ${{ steps.versions.outputs.installed }}
+        run: |
+          {
+            echo "The live benchmark failed with katana $INSTALLED (tested: $(jq -r .katana.version engines.json))."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/verify.txt" 2>/dev/null || true
+            tail -n 20 "$RUNNER_TEMP/bench.log" 2>/dev/null || true
+            echo '```'
+            echo
+            echo "Run: $RUN_URL"
+          } > "$RUNNER_TEMP/issue.md"
+          gh label create engine-drift --color d93f0b --description "An engine update broke the tool" 2>/dev/null || true
+          open=$(gh issue list --label engine-drift --state open --json number --jq '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue create --title "Engine drift: katana $INSTALLED" --label engine-drift --body-file "$RUNNER_TEMP/issue.md"
+          fi
+          exit 1
+      - name: Open or update the bump PR
+        if: steps.bench.outcome == 'success'
+        env:
+          INSTALLED: ${{ steps.versions.outputs.installed }}
+          TESTED: ${{ steps.versions.outputs.tested }}
+        run: |
+          newer=$(printf '%s\n%s\n' "$TESTED" "$INSTALLED" | sort -V | tail -1)
+          if [ -z "$INSTALLED" ] || [ "$INSTALLED" = "$TESTED" ] || [ "$newer" != "$INSTALLED" ]; then
+            echo "katana $INSTALLED is not newer than the tested $TESTED; nothing to bump"
+            exit 0
+          fi
+          # the live run refreshed bench/fixtures; BENCHMARK.md numbers come from the committed ones
+          git checkout -- bench/fixtures
+          jq --arg v "$INSTALLED" '.katana.version = $v' engines.json > engines.json.new
+          mv engines.json.new engines.json
+          branch=engine-bump/katana-$INSTALLED
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git commit -am "Test with katana $INSTALLED"
+          git push -f origin "$branch"
+          {
+            echo "The live benchmark passed with a newer katana."
+            echo
+            echo "- katana: $TESTED → $INSTALLED"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/verify.txt"
+            echo '```'
+            echo
+            echo "The refreshed fixtures are in the run's live-bench artifact, not in this PR. Run: $RUN_URL"
+          } > "$RUNNER_TEMP/pr.md"
+          if [ -n "$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" ]; then
+            gh pr edit "$branch" --body-file "$RUNNER_TEMP/pr.md"
+          else
+            gh pr create --head "$branch" --title "Test with katana $INSTALLED" --body-file "$RUNNER_TEMP/pr.md"
+          fi
