@@ -194,11 +194,14 @@ func TestScopeAloneCrawlsWhatTheScopeNames(t *testing.T) {
 	}
 }
 
-// A scope with only a wildcard has nothing to crawl yet: exit 1 with the next step.
+// A scope with only a wildcard has nothing to crawl yet: exit 2 with the next step.
 func TestScopeWithOnlyWildcardPointsToSubs(t *testing.T) {
 	var out, errb bytes.Buffer
-	if code := run([]string{"--scope", scopeFile(t), "--katana", "/nonexistent/katana"}, &out, &errb); code != 1 {
-		t.Fatalf("exit %d", code)
+	if code := run([]string{"--scope", scopeFile(t), "--katana", "/nonexistent/katana"}, &out, &errb); code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,`) {
+		t.Errorf("stdout should start with schema_version: %s", out.String())
 	}
 	var res struct {
 		Summary string

@@ -267,7 +267,7 @@ What the reducer does with them:
 - **Errors** say what to try next. If katana is missing, the exit code is 2.
 - **`schema_version`** is the first field (currently `1`) and changes only when the schema changes incompatibly.
 - **Invalid scope:** a scope file with bad lines (or none) stops the run before katana starts, with one `{"kind":"scope"}` error per invalid line in `errors`, naming the line and why.
-- **Exit codes:** `0` ok; `2` a structured error with the JSON on stdout (invalid scope, katana missing): read `errors[].kind`; `1` wrong usage (bad flag, missing `--scope`, no target in scope), with the message on stderr.
+- **Exit codes:** `0` ok; `2` a structured error with the JSON on stdout (invalid scope, a scope that names no single host, katana missing): read `errors[].kind`; `1` wrong usage (bad flag, missing `--scope`, no target in scope), with the message on stderr.
 
 Fields an agent can rebuild are left out to save tokens:
 
