@@ -1,5 +1,11 @@
 # ⚡ Raijin JS
 
+[![CI](https://github.com/protonnegativo/raijin-js/actions/workflows/ci.yml/badge.svg)](https://github.com/protonnegativo/raijin-js/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/protonnegativo/raijin-js)](https://github.com/protonnegativo/raijin-js/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/protonnegativo/raijin-js)](LICENSE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/protonnegativo/raijin-js.svg)](https://pkg.go.dev/github.com/protonnegativo/raijin-js)
+[![Go Report Card](https://goreportcard.com/badge/github.com/protonnegativo/raijin-js)](https://goreportcard.com/report/github.com/protonnegativo/raijin-js)
+
 **katana for AI agents, aimed at JavaScript: every JS file, every endpoint, API route, URL and source map in them, deduplicated across files, and secrets with their file and line, redacted, ranked first.**
 
 `raijin-js` is a tool of **Raijin**, an arsenal of offensive security tools built for AI agents. It runs [katana](https://github.com/projectdiscovery/katana) underneath to find the JavaScript files of a site, parses their bodies itself, and returns the **Raijin Schema**: one compact JSON where an endpoint referenced by 40 chunks is one entry listing `/static/js/chunk-[1-40].js`, secrets (high), admin, debug and internal routes, cloud buckets, internal hosts and exposed source maps are ranked findings, plain paths, third-party URLs and library files are groups, and anything it had to cut is counted.
