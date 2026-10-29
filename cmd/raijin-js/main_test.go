@@ -236,3 +236,43 @@ not json
 		t.Errorf("the line that is not JSON must be counted: %v", v.Omitted)
 	}
 }
+
+func TestInvalidScopeIsAStructuredErrorAndNothingRuns(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "scope.txt")
+	if err := os.WriteFile(p, []byte("example.com:443\n10.0.0.7/24\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	// --katana points at a binary that does not exist: if the engine were started, the result would carry
+	// a missing_engine error instead.
+	code := run([]string{"--scope", p, "-u", "https://example.com/", "--katana", "/nonexistent/katana"}, &out, &errb)
+	if code == 0 {
+		t.Fatalf("exit 0 for an invalid scope: %s", out.String())
+	}
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,"tool":"raijin-js"`) {
+		t.Errorf("result should start with schema_version: %s", out.String())
+	}
+	var v struct {
+		Summary string `json:"summary"`
+		Errors  []struct{ Kind, Hint string }
+	}
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+		t.Fatalf("stdout is not JSON: %v", err)
+	}
+	if len(v.Errors) != 2 {
+		t.Fatalf("want one error per invalid line, got %+v", v.Errors)
+	}
+	for i, want := range []string{"port in rule", "CIDR has host bits set"} {
+		if v.Errors[i].Kind != "scope" || !strings.Contains(v.Errors[i].Hint, want) {
+			t.Errorf("error %d: %+v, want kind scope and %q", i, v.Errors[i], want)
+		}
+	}
+}
+
+func TestMissingScopeFileIsAStructuredError(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{"--scope", filepath.Join(t.TempDir(), "nope.txt"), "--input", "../../testdata/sample.jsonl"}, &out, &errb)
+	if code == 0 || !strings.Contains(out.String(), `"kind":"scope"`) {
+		t.Errorf("exit %d, stdout %s", code, out.String())
+	}
+}

@@ -15,7 +15,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/protonnegativo/raijin-js/internal/scope"
+	"github.com/protonnegativo/raijin-core/scope"
 )
 
 // ErrNotFound is returned when the katana binary is not on PATH.
