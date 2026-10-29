@@ -23,7 +23,11 @@ Noisy crawl: 45 JS files (40 chunks, 5 libraries), 64 distinct items in 690 (ite
   katana text + JS bodies ████                    15,793 tokens
   katana -jsonl -or       █████████▊              37,809 tokens
   katana -jsonl           ████████████████████    77,961 tokens
+```
 
+On the noisy crawl katana's text is smaller: 1,242 tokens against 2,518 for raijin-js. That text is 99 URLs, and it says where the 45 JS files are, not what is in them. raijin-js returns the 64 distinct items in the bundles, with the 6 API routes as findings, each listing the 40 chunks as one location, and the agent does not have to fetch the files. If you only need the list of URLs, the text is cheaper; if you need what the JS contains, the text plus the bodies is 15,793 tokens.
+
+```
 Findings crawl: 6 JS files, 24 findings (4 high, 14 medium, 6 low), 2 source maps fetched
   raijin-js               ███                      1,521 tokens
   katana text             ▋                          285 tokens
@@ -31,6 +35,8 @@ Findings crawl: 6 JS files, 24 findings (4 high, 14 medium, 6 low), 2 source map
   katana -jsonl -or       █████████▉               4,882 tokens
   katana -jsonl           ████████████████████     9,895 tokens
 ```
+
+On the findings crawl katana's text is also smaller: 285 tokens against 1,521 for raijin-js. The text lists 20 URLs and none of the 24 findings (4 high, 14 medium, 6 low) in the six files: keys, a private key header, admin and debug routes, buckets, internal hosts and source maps, with their file and line, secrets redacted and ranked first. These six files total only 2.6 KB, so reading the text plus the bodies (1,192 tokens) is slightly cheaper than raijin-js here; on real bundles the bodies grow with the code and raijin-js grows with the items.
 
 raijin-js reads **31×** fewer tokens than `katana -jsonl` on the noisy crawl and **6.5×** fewer on the findings crawl. Against katana's JSONL without the raw request and response strings (`-or`, what raijin-js saves as `raw`) it is **15×** and **3.2×** smaller. Each crawl's bars are drawn to scale against `katana -jsonl`.
 
