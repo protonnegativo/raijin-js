@@ -246,10 +246,10 @@ func TestInvalidScopeIsAStructuredErrorAndNothingRuns(t *testing.T) {
 	// --katana points at a binary that does not exist: if the engine were started, the result would carry
 	// a missing_engine error instead.
 	code := run([]string{"--scope", p, "-u", "https://example.com/", "--katana", "/nonexistent/katana"}, &out, &errb)
-	if code == 0 {
-		t.Fatalf("exit 0 for an invalid scope: %s", out.String())
+	if code != 2 {
+		t.Fatalf("exit %d for an invalid scope, want 2: %s", code, out.String())
 	}
-	if !strings.HasPrefix(out.String(), `{"schema_version":1,"tool":"raijin-js"`) {
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,`) {
 		t.Errorf("result should start with schema_version: %s", out.String())
 	}
 	var v struct {
@@ -272,7 +272,7 @@ func TestInvalidScopeIsAStructuredErrorAndNothingRuns(t *testing.T) {
 func TestMissingScopeFileIsAStructuredError(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := run([]string{"--scope", filepath.Join(t.TempDir(), "nope.txt"), "--input", "../../testdata/sample.jsonl"}, &out, &errb)
-	if code == 0 || !strings.Contains(out.String(), `"kind":"scope"`) {
+	if code != 2 || !strings.Contains(out.String(), `"kind":"scope"`) || !strings.HasPrefix(out.String(), `{"schema_version":1,`) {
 		t.Errorf("exit %d, stdout %s", code, out.String())
 	}
 }
