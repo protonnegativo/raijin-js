@@ -8,11 +8,19 @@ import (
 	"github.com/protonnegativo/raijin-js/internal/katana"
 )
 
-// version is the release the binary was installed from (go install ...@v0.1.3 or @latest), or "dev"
-// for a local build, with the commit and "+dirty" when the build settings carry them.
+// releaseVersion is set by the release build (-ldflags "-X main.releaseVersion=v0.1.3"). It has to be a
+// plain string variable: -X is ignored for a variable initialized with a function call.
+var releaseVersion string
+
+// version is the release the binary was built as: releaseVersion, or the release it was installed from
+// (go install ...@v0.1.3 or @latest), or "dev" for a local build, with the commit and "+dirty" when the
+// build settings carry them.
 var version = buildVersion(debug.ReadBuildInfo())
 
 func buildVersion(info *debug.BuildInfo, ok bool) string {
+	if releaseVersion != "" {
+		return releaseVersion
+	}
 	if !ok {
 		return "dev"
 	}
