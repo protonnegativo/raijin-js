@@ -28,7 +28,7 @@ jobs:
       WANT: ${{ inputs.katana || 'latest' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           # katana's go.mod may need a newer Go than raijin-js's; raijin-js builds with any newer one
           go-version: stable
