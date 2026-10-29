@@ -2,7 +2,8 @@
 # Tags HEAD with the next release and creates its GitHub Release. Usage: release.sh [patch|minor|major]
 # [base]. With a base commit (the push's "before"), it skips when the change since then touches only
 # files that are not in the binary. release.yml runs it on every push; the drift job runs it after it
-# pushes an engine bump, because a push made with GITHUB_TOKEN does not trigger release.yml.
+# pushes an engine bump, because a push made with GITHUB_TOKEN does not trigger release.yml. It also
+# starts goreleaser.yml for the new tag, since the tag it pushes does not start it either.
 set -euo pipefail
 
 bump=${1:-patch}
@@ -40,4 +41,6 @@ fi
 git tag -a "$tag" -m "$tag"
 git push origin "$tag"
 gh release create "$tag" --title "$tag" --generate-notes
+# a tag and a Release created with GITHUB_TOKEN do not start other workflows: build the binaries explicitly
+gh workflow run goreleaser.yml -f tag="$tag"
 echo "released $tag"
