@@ -18,21 +18,21 @@ Here is the same crawl read by an agent (tokens, `o200k_base`):
 
 ```
 Noisy crawl: 45 JS files (40 chunks, 5 libraries), 64 distinct items in 690 (item, file) pairs
-  raijin-js               ▋                        2,493 tokens
+  raijin-js               ▋                        2,518 tokens
   katana text             ▍                        1,242 tokens
   katana text + JS bodies ████                    15,793 tokens
   katana -jsonl -or       █████████▊              37,809 tokens
   katana -jsonl           ████████████████████    77,961 tokens
 
 Findings crawl: 6 JS files, 24 findings (4 high, 14 medium, 6 low), 2 source maps fetched
-  raijin-js               ███                      1,496 tokens
+  raijin-js               ███                      1,521 tokens
   katana text             ▋                          285 tokens
   katana text + JS bodies ██▍                      1,192 tokens
   katana -jsonl -or       █████████▉               4,882 tokens
   katana -jsonl           ████████████████████     9,895 tokens
 ```
 
-raijin-js reads **31×** fewer tokens than `katana -jsonl` on the noisy crawl and **6.6×** fewer on the findings crawl. Against katana's JSONL without the raw request and response strings (`-or`, what raijin-js saves as `raw`) it is **15×** and **3.3×** smaller. Each crawl's bars are drawn to scale against `katana -jsonl`.
+raijin-js reads **31×** fewer tokens than `katana -jsonl` on the noisy crawl and **6.5×** fewer on the findings crawl. Against katana's JSONL without the raw request and response strings (`-or`, what raijin-js saves as `raw`) it is **15×** and **3.2×** smaller. Each crawl's bars are drawn to scale against `katana -jsonl`.
 
 - **Nothing is lost.** Every JS file katana found is listed with its status, and every path, URL, source map and secret in them is listed with every file it is in. `bench/verify.py` parses the bodies again with a Python port of the rules and checked all 728 (item, file) pairs, 51 JS files, 64 jsluice endpoints and 2 source maps of both crawls: none were missing.
 - **One entry per item, not per file.** `/api/v1/cart` in 40 chunks is one finding with one location, `/static/js/chunk-[1-40].js`. Six plain paths that every chunk has are one group.
@@ -41,7 +41,7 @@ raijin-js reads **31×** fewer tokens than `katana -jsonl` on the noisy crawl an
 - **Source maps are checked, not guessed.** raijin-js asks katana to fetch every `sourceMappingURL` the files point to: a map that answers 200 is a `verified` finding, one that answers 404 is a group.
 - **Output is bounded.** On a huge site, `--max-bytes` cuts the least important data first and counts every cut.
 
-Against katana's text output, raijin-js is **2.0× larger** on the noisy crawl and **5.2× larger** on the findings crawl: a bare list of 99 or 20 URLs is smaller than what is in the files. But the text has none of it: no endpoint, no key, no bucket, no status. The fair comparison for an agent that starts from the text is the text plus the JS bodies it lists, and raijin-js is **6.3× smaller** on the noisy crawl and **1.25× larger** on the findings crawl, where the lab's six files total 2.6 KB (real bundles are hundreds of KB, and the bodies grow with them while raijin-js grows with the items). Full method and numbers are in [BENCHMARK.md](BENCHMARK.md), and `bench/run.sh` reproduces them.
+Against katana's text output, raijin-js is **2.0× larger** on the noisy crawl and **5.3× larger** on the findings crawl: a bare list of 99 or 20 URLs is smaller than what is in the files. But the text has none of it: no endpoint, no key, no bucket, no status. The fair comparison for an agent that starts from the text is the text plus the JS bodies it lists, and raijin-js is **6.3× smaller** on the noisy crawl and **1.28× larger** on the findings crawl, where the lab's six files total 2.6 KB (real bundles are hundreds of KB, and the bodies grow with them while raijin-js grows with the items). Full method and numbers are in [BENCHMARK.md](BENCHMARK.md), and `bench/run.sh` reproduces them.
 
 ## Install
 
@@ -85,8 +85,9 @@ What raijin-js asks katana for: depth 3 (`-d 3`), JavaScript parsing (`-jc -jsl`
 
 ```json
 {
+  "schema_version": 1,
   "tool": "raijin-js",
-  "version": "0.1.0",
+  "version": "v0.1.1",
   "target": "http://localhost:19101/",
   "summary": "6 JS files (1 libraries), 35 items: 24 findings (4 high, 14 medium, 6 low), 8 groups",
   "origin": "http://localhost:19101",
@@ -264,6 +265,9 @@ What the reducer does with them:
 
   Every cut is counted in `omitted`, `budget.truncated` is set, and `next` points to the raw file. `--max-items` caps the number of findings (0, the default, keeps all).
 - **Errors** say what to try next. If katana is missing, the exit code is 2.
+- **`schema_version`** is the first field (currently `1`) and changes only when the schema changes incompatibly.
+- **Invalid scope:** a scope file with bad lines (or none) stops the run before katana starts, with one `{"kind":"scope"}` error per invalid line in `errors`, naming the line and why.
+- **Exit codes:** `0` ok; `2` a structured error with the JSON on stdout (invalid scope, katana missing): read `errors[].kind`; `1` wrong usage (bad flag, missing `--scope`, no target in scope), with the message on stderr.
 
 Fields an agent can rebuild are left out to save tokens:
 
@@ -310,7 +314,7 @@ bench/run.sh            # replay bench/fixtures and count tokens
 LIVE=1 bench/run.sh     # start the local lab, crawl it again, refresh the fixtures
 ```
 
-Standard library only. katana runs as a subprocess with `-jsonl -silent -nc -duc -or -jc -jsl`, so the binary stays small and katana can be updated on its own. Its stdin is `/dev/null`, because katana reads targets from stdin when stdin is not a terminal. The secret rules are in `internal/extract/rules.json`, embedded in the binary and read by `bench/verify.py`.
+The only dependency besides the standard library is [raijin-core](https://github.com/protonnegativo/raijin-core) (scope, state and the schema envelope shared by the Raijin tools). katana runs as a subprocess with `-jsonl -silent -nc -duc -or -jc -jsl`, so the binary stays small and katana can be updated on its own. Its stdin is `/dev/null`, because katana reads targets from stdin when stdin is not a terminal. The secret rules are in `internal/extract/rules.json`, embedded in the binary and read by `bench/verify.py`.
 
 ## Responsible use
 
