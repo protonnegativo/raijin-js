@@ -28,8 +28,8 @@ Reproduce: `bench/run.sh` replays the saved crawls in `bench/fixtures`. `LIVE=1 
 | katana `-jsonl -or` (raijin-js's raw) | 114,320 | 37,809 | 2.1× |
 | katana text (stdout+stderr) | 4,166 | 1,242 | 63× |
 | katana text + the JS bodies | 53,577 | 15,793 | 4.9× |
-| **raijin-js JSON (default)** | 8,240 | **2,493** | **31×** |
-| raijin-js `--pretty` | 13,204 | 3,905 | 20× |
+| **raijin-js JSON (default)** | 8,296 | **2,518** | **31×** |
+| raijin-js `--pretty` | 13,264 | 3,933 | 20× |
 | raijin-js `--format table` | 2,698 | 841 | 93× |
 
 ## Scenario 2: findings
@@ -46,8 +46,8 @@ Reproduce: `bench/run.sh` replays the saved crawls in `bench/fixtures`. `LIVE=1 
 | katana `-jsonl -or` (raijin-js's raw) | 14,570 | 4,882 | 2.0× |
 | katana text (stdout+stderr) | 980 | 285 | 35× |
 | katana text + the JS bodies | 3,606 | 1,192 | 8.3× |
-| **raijin-js JSON (default)** | 5,093 | **1,496** | **6.6×** |
-| raijin-js `--pretty` | 8,013 | 2,339 | 4.2× |
+| **raijin-js JSON (default)** | 5,149 | **1,521** | **6.5×** |
+| raijin-js `--pretty` | 8,073 | 2,367 | 4.2× |
 | raijin-js `--format table` | 2,366 | 722 | 14× |
 
 In a live run (not a replay) the raijin-js JSON also has `raw`, the path of katana's saved JSONL: about 17 tokens.
@@ -73,11 +73,11 @@ Since verify.py is a port of the extractor, it proves that the reducer drops not
 
 ## Reading the numbers
 
-- **Against `katana -jsonl`**, the structured output an agent would parse, raijin-js uses **31× fewer tokens** on the noisy crawl and **6.6× fewer** on the findings crawl. Against the JSONL without the raw strings (`-or`) it is **15×** and **3.3×** smaller. The gap grows with repetition: an endpoint in 40 chunks costs one entry and one location.
-- **Against katana's text output**, raijin-js is larger: **2.0×** on the noisy crawl (1,242 → 2,493) and **5.2×** on the findings crawl (285 → 1,496). A list of 99 or 20 URLs is smaller than what is in the files, but it holds none of it: no endpoint, no key, no bucket, no status.
+- **Against `katana -jsonl`**, the structured output an agent would parse, raijin-js uses **31× fewer tokens** on the noisy crawl and **6.5× fewer** on the findings crawl. Against the JSONL without the raw strings (`-or`) it is **15×** and **3.2×** smaller. The gap grows with repetition: an endpoint in 40 chunks costs one entry and one location.
+- **Against katana's text output**, raijin-js is larger: **2.0×** on the noisy crawl (1,242 → 2,518) and **5.3×** on the findings crawl (285 → 1,521). A list of 99 or 20 URLs is smaller than what is in the files, but it holds none of it: no endpoint, no key, no bucket, no status.
 - **Against the text plus the JS bodies**, what an agent that starts from the text still has to read:
-  - noisy: **6.3× smaller** (15,793 → 2,493);
-  - findings: **1.25× larger** (1,192 → 1,496).
+  - noisy: **6.3× smaller** (15,793 → 2,518);
+  - findings: **1.28× larger** (1,192 → 1,521).
 
   The findings lab is six files of 2.6 KB where almost every line is a finding, so there is little to cut, and each finding's id, tags, severity and location cost more than the line it came from. Real bundles are tens to hundreds of KB per file, mostly code with no endpoint or key in it: the bodies grow with the code, raijin-js grows with the items. The lab files are kept small so the fixtures stay small; this row is the one where that matters.
 - **The output stays bounded.** On a site too big for `--max-bytes`, raijin-js cuts the least important data first: group locations, then groups, then extra locations of low-ranked findings, then low-ranked findings. Every cut is counted in `omitted`, and `next` points to the raw file. Raw katana output has no upper bound.

@@ -27,6 +27,16 @@ func TestBuildVersion(t *testing.T) {
 	}
 }
 
+func TestBuildVersionPrefersTheReleaseVersion(t *testing.T) {
+	releaseVersion = "v9.9.9"
+	defer func() { releaseVersion = "" }()
+	for _, info := range []*debug.BuildInfo{{Main: debug.Module{Version: "v0.1.3"}}, {}, nil} {
+		if got := buildVersion(info, info != nil); got != "v9.9.9" {
+			t.Errorf("buildVersion = %q, want v9.9.9", got)
+		}
+	}
+}
+
 func TestVersionLine(t *testing.T) {
 	engines, err := katana.Engines()
 	if err != nil {

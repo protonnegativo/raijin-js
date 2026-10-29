@@ -194,11 +194,14 @@ func TestScopeAloneCrawlsWhatTheScopeNames(t *testing.T) {
 	}
 }
 
-// A scope with only a wildcard has nothing to crawl yet: exit 1 with the next step.
+// A scope with only a wildcard has nothing to crawl yet: exit 2 with the next step.
 func TestScopeWithOnlyWildcardPointsToSubs(t *testing.T) {
 	var out, errb bytes.Buffer
-	if code := run([]string{"--scope", scopeFile(t), "--katana", "/nonexistent/katana"}, &out, &errb); code != 1 {
-		t.Fatalf("exit %d", code)
+	if code := run([]string{"--scope", scopeFile(t), "--katana", "/nonexistent/katana"}, &out, &errb); code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,`) {
+		t.Errorf("stdout should start with schema_version: %s", out.String())
 	}
 	var res struct {
 		Summary string
@@ -234,5 +237,45 @@ not json
 	}
 	if v.Omitted["unparsed"] != 1 {
 		t.Errorf("the line that is not JSON must be counted: %v", v.Omitted)
+	}
+}
+
+func TestInvalidScopeIsAStructuredErrorAndNothingRuns(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "scope.txt")
+	if err := os.WriteFile(p, []byte("example.com:443\n10.0.0.7/24\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	// --katana points at a binary that does not exist: if the engine were started, the result would carry
+	// a missing_engine error instead.
+	code := run([]string{"--scope", p, "-u", "https://example.com/", "--katana", "/nonexistent/katana"}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("exit %d for an invalid scope, want 2: %s", code, out.String())
+	}
+	if !strings.HasPrefix(out.String(), `{"schema_version":1,`) {
+		t.Errorf("result should start with schema_version: %s", out.String())
+	}
+	var v struct {
+		Summary string `json:"summary"`
+		Errors  []struct{ Kind, Hint string }
+	}
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+		t.Fatalf("stdout is not JSON: %v", err)
+	}
+	if len(v.Errors) != 2 {
+		t.Fatalf("want one error per invalid line, got %+v", v.Errors)
+	}
+	for i, want := range []string{"port in rule", "CIDR has host bits set"} {
+		if v.Errors[i].Kind != "scope" || !strings.Contains(v.Errors[i].Hint, want) {
+			t.Errorf("error %d: %+v, want kind scope and %q", i, v.Errors[i], want)
+		}
+	}
+}
+
+func TestMissingScopeFileIsAStructuredError(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{"--scope", filepath.Join(t.TempDir(), "nope.txt"), "--input", "../../testdata/sample.jsonl"}, &out, &errb)
+	if code != 2 || !strings.Contains(out.String(), `"kind":"scope"`) || !strings.HasPrefix(out.String(), `{"schema_version":1,`) {
+		t.Errorf("exit %d, stdout %s", code, out.String())
 	}
 }

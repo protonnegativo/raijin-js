@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/protonnegativo/raijin-core/scope"
 	"github.com/protonnegativo/raijin-js/internal/katana"
 	"github.com/protonnegativo/raijin-js/internal/schema"
-	"github.com/protonnegativo/raijin-js/internal/scope"
 )
 
 // awsKey is the example key from the AWS documentation, built so no scanner reads this file as a leak.
